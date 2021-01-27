@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+   <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+
+  <title>Django Fixture creator</title>
+</head>
+<body>
+     
+<header>
+  <div class="navbar navbar-dark bg-dark shadow-sm">
+    <div class="container">
+      <a href="#" class="navbar-brand d-flex align-items-center">
+        <strong>Django Fixture from Insert Queries</strong>
+      </a>
+    </div>
+  </div>
+</header>
+
+ <div class="container mt-3">
+ <div class="row">
+        <div class="col-md-6">
+                    Model: <input id="model" type="text"/>
+            Primary Key col: <input id="pkCol" type="text" name="pkCol" value="id"/><br>
+            Insert Query <i>(Ideally copied from SequelPro)</i> : <br>
+            <textarea id="query" rows=25 class="w-100 mt-1 " ></textarea>
+            <button class="btn btn-primary" onclick="convert()">convert</button>
+
+        </div>
+        <div class="col-md-6">
+            <h5>Django Fixture</h5>
+            <br>
+            <textarea id="results" rows=25 class="w-100 "></textarea>
+        </div>
+   </div>
+
+</div>
+<script>
+    function getJsonFromQuery(query) {
+        const regex = /INSERT INTO `?(\S+)`?\s\(([^\(]+)\)\s+VALUES/img;
+
+        const results = []
+        const matches = regex.exec(query)
+        if(matches) {
+            if (matches.index === regex.lastIndex) {
+                    regex.lastIndex++;
+                }
+            if(matches.length > 2){
+                dbName = matches[1].replaceAll('`','');
+            
+                fields = matches[2].split(',').map(f => f.replaceAll('`','').trim());
+                
+                rawValues = query.substring(regex.lastIndex).trim();
+            
+                a = rawValues.split(/\((.+)\)[,;]/mg);
+                fieldValues = []
+                a.forEach(item => {
+                if(item.trim()){
+                    fieldValues.push(item.split(',').map(i => i.trim()))
+                }
+                });
+                
+                fieldValues.forEach(row => {
+                let rowJson = {};
+                for(let i=0; i< row.length; i++){
+                    rowJson[fields[i]] = sanitizeValue(row[i])
+                }
+                
+                results.push(rowJson);
+                });
+                
+                return {
+                    db: dbName,
+                    rows: results
+                }
+            }
+        }else{
+            throw new Error("Could not parse the query");
+        }
+    }
+
+    function sanitizeValue(value){
+        // Value will always be a string.
+        // Remove additional quotes if exists.
+        // TODO: this is very quick and dirty way, Do it in a better way
+        if(value[0] === "'" || value[0] === '"'){
+            value = value.substring(1);
+        }
+        if( value[value.length - 1] == "'" || value[value.length - 1] == '"'){
+           value = value.slice(0,-1)
+        }
+        const dateRegex = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/g;
+        if(dateRegex.test(value)){
+            return value.replace(" ", "T")+"Z"
+        }
+        if(value === "NULL"){
+            return null;
+        }
+        return value;
+    }
+
+    function prepareDjangoFixture(query, model, pkCol){
+        const res = getJsonFromQuery(query);
+        return res.rows.map(row => {
+            const pk = row[pkCol];
+            delete row[pkCol];
+            return {
+                fields: row,
+                model,
+                pk
+            }
+        })
+    }
+    
+    function convert(){
+        const q = document.getElementById('query').value
+        const model = document.getElementById('model').value
+        const pkCol = document.getElementById('pkCol').value
+        const fixtures = prepareDjangoFixture(q, model, pkCol);
+        document.getElementById('results').value= JSON.stringify(fixtures, " ", 2);
+    }
+</script>
+</body>
+</html>
